@@ -17,7 +17,7 @@ type Config struct {
 
 func MustLoad() *Config {
 	var cfg Config
-	if err := cleanenv.ReadEnv(cfg); err != nil {
+	if err := cleanenv.ReadEnv(&cfg); err != nil {
 		log.Fatalf("failed to read config: %s", err)
 	}
 	return &cfg

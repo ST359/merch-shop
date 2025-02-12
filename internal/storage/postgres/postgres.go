@@ -5,11 +5,33 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/ST359/avito-trainee-backend-winter-2025/internal/storage"
 	_ "github.com/lib/pq"
 )
 
 type Storage struct {
 	db *sql.DB
+}
+type UserInfo struct {
+	CoinHistory CoinHistory
+	Coins       int
+	Inventory   []InventoryEntry
+}
+type CoinHistory struct {
+	Recieved []TransactionRecieved
+	Sent     []TransactionSent
+}
+type TransactionRecieved struct {
+	Amount   int
+	FromUser string
+}
+type TransactionSent struct {
+	Amount int
+	ToUser string
+}
+type InventoryEntry struct {
+	Quantity int
+	Type     string
 }
 
 func New(port, user, password, name, host string) (*Storage, error) {
@@ -39,4 +61,209 @@ func (s *Storage) UserBalance(user string) (int, error) {
 		return -1, fmt.Errorf("%s: %w", op, err)
 	}
 	return balance, nil
+}
+
+// Function SendCoins accepts names of users(from,to) and amount
+func (s *Storage) SendCoins(fromUser string, toUser string, amount int) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+
+	var fromCoins, toCoins int
+	var fromUserId, toUserId int
+	err = psql.Select("id", "coins").
+		From("users").
+		Where("name = ?", fromUser).
+		RunWith(tx).
+		QueryRow().
+		Scan(&fromUserId, &fromCoins)
+	if err != nil {
+		return fmt.Errorf("failed to get coins for fromUser: %w", err)
+	}
+	if fromCoins < amount {
+		return storage.ErrUnsufficientBalance
+	}
+	err = psql.Select("id", "coins").
+		From("users").
+		Where("name = ?", toUser).
+		RunWith(tx).
+		QueryRow().
+		Scan(&toUserId, &toCoins)
+	if err != nil {
+		return fmt.Errorf("failed to get coins for toUser: %w", err)
+	}
+
+	if fromCoins < amount {
+		return storage.ErrUnsufficientBalance
+	}
+
+	_, err = psql.Update("users").
+		Set("coins", fromCoins-amount).
+		Where("name = ?", fromUser).
+		RunWith(tx).
+		Exec()
+	if err != nil {
+		return fmt.Errorf("failed to update coins for fromUser: %w", err)
+	}
+
+	_, err = psql.Update("users").
+		Set("coins", toCoins+amount).
+		Where("name = ?", toUser).
+		RunWith(tx).
+		Exec()
+	if err != nil {
+		return fmt.Errorf("failed to update coins for toUser: %w", err)
+	}
+	_, err = psql.Insert("transactions").
+		Columns("from_user_id", "to_user_id", "amount").
+		Values(fromUserId, toUserId, amount).
+		RunWith(tx).
+		Exec()
+	if err != nil {
+		return fmt.Errorf("failed to create transaction record: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+func (s *Storage) UserInfo(user string) (*UserInfo, error) {
+	const op = "storage.postgres.User"
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	var userInfo UserInfo
+	var userID int
+	//balance
+	err := psql.Select("id", "coins").
+		From("users").
+		Where("name=?", user).
+		RunWith(s.db).
+		QueryRow().
+		Scan(&userInfo.Coins)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	//inventory
+	rows, err := squirrel.Select("m.name", "ui.quantity").
+		From("user_inventory ui").
+		Join("merch m ON ui.merch_id = m.id").
+		Where("ui.user_id = ?", userID).
+		RunWith(s.db).
+		Query()
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var ie InventoryEntry
+		if err := rows.Scan(&ie.Type, &ie.Quantity); err != nil {
+			return nil, err
+		}
+		userInfo.Inventory = append(userInfo.Inventory, ie)
+	}
+	//coin history
+	//transactions SENT
+	tsRows, err := squirrel.Select("to_user_id", "amount").
+		From("transactions").
+		Where("from_user_id = ?", userID).
+		RunWith(s.db).
+		Query()
+	if err != nil {
+		return nil, err
+	}
+	for tsRows.Next() {
+		var (
+			trSent TransactionSent
+		)
+		if err := tsRows.Scan(&trSent.ToUser, &trSent.Amount); err != nil {
+			return nil, err
+		}
+		userInfo.CoinHistory.Sent = append(userInfo.CoinHistory.Sent, trSent)
+	}
+	//transactions RECIEVED
+	trRows, err := squirrel.Select("from_user_id", "amount").
+		From("transactions").
+		Where("to_user_id = ?", userID).
+		RunWith(s.db).
+		Query()
+	if err != nil {
+		return nil, err
+	}
+	for trRows.Next() {
+		var (
+			trRcv TransactionRecieved
+		)
+		if err := trRows.Scan(&trRcv.FromUser, &trRcv.Amount); err != nil {
+			return nil, err
+		}
+		userInfo.CoinHistory.Recieved = append(userInfo.CoinHistory.Recieved, trRcv)
+	}
+	return &userInfo, nil
+}
+
+// Function Buy accepts name of an item, adds an item to user inventory
+func (s *Storage) Buy(item string, user string) error {
+	const op = "storage.postgres.Buy"
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	var userBalance, userID, itemPrice, itemID int
+	err = psql.Select("id", "coins").
+		From("users").
+		Where("name = ?", user).
+		RunWith(tx).
+		QueryRow().
+		Scan(&userID, &userBalance)
+	if err != nil {
+		return fmt.Errorf("failed to get coins for user: %w", err)
+	}
+
+	err = psql.Select("price", "id").
+		From("merch").
+		Where("name = ?", item).
+		RunWith(tx).
+		QueryRow().
+		Scan(&itemPrice, &itemID)
+	if err != nil {
+		return fmt.Errorf("failed to get items info: %w", err)
+	}
+
+	if userBalance < itemPrice {
+		return storage.ErrUnsufficientBalance
+	}
+
+	_, err = psql.Update("users").
+		Set("coins", userBalance-itemPrice).
+		Where("name = ?", user).
+		RunWith(tx).
+		Exec()
+	if err != nil {
+		return fmt.Errorf("failed to update coins for fromUser: %w", err)
+	}
+
+	/*  INSERT INTO user_inventory (user_id, merch_id, quantity)
+	VALUES (1, 2, 5)  -- пользователь с id 1 получает 5 предметов с id 2
+	ON CONFLICT (user_id, merch_id) DO UPDATE
+	SET quantity = user_inventory.quantity + EXCLUDED.quantity; */
+	_, err = psql.Insert("user_inventory").
+		Columns("user_id", "merch_id", "quantity").
+		Values(userID, itemID, 1).
+		RunWith(tx).
+		Suffix("ON CONFLICT (user_id, merch_id) DO UPDATE SET quantity = user_inventory.quantity + EXCLUDED.quantity").
+		Exec()
+	if err != nil {
+		return fmt.Errorf("failed to update inventory: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+
 }

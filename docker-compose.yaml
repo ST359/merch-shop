@@ -30,7 +30,7 @@ services:
       POSTGRES_DB: shop
     volumes:
       # "./migrations/init.sql" - DB migrations path
-      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./migrations/1_init.up.sql:/docker-entrypoint-initdb.d/1_init.up.sql
     ports:
       - "5432:5432"
     healthcheck:

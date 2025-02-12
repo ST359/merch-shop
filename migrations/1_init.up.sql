@@ -24,6 +24,13 @@ CREATE TABLE IF NOT EXISTS users (
     coins INT DEFAULT 1000
 );
 
+CREATE TABLE IF NOT EXISTS user_inventory (
+    user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    merch_id INT REFERENCES merch(id) ON DELETE CASCADE,
+    quantity INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, merch_id)
+);
+
 CREATE TABLE IF NOT EXISTS transactions (
     id SERIAL PRIMARY KEY,
     from_user_id INT NOT NULL,
