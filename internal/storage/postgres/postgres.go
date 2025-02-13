@@ -62,6 +62,41 @@ func (s *Storage) UserBalance(user string) (int, error) {
 	}
 	return balance, nil
 }
+func (s *Storage) AddUser(name, passHash string) error {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	_, err := psql.Insert("users").
+		Columns("name", "pass_hash").
+		Values(name, passHash).
+		RunWith(s.db).
+		Exec()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (s *Storage) UserPassHash(name string) (string, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	var passHash string
+	err := psql.Select("pass_hash").From("users").Where("name=?", name).
+		RunWith(s.db).Scan(&passHash)
+	if err != nil {
+		return "", err
+	}
+	return passHash, nil
+}
+
+func (s *Storage) UserExist(name string) (bool, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	var count int
+	err := psql.Select("COUNT(*)").From("users").Where("name=?", name).RunWith(s.db).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return true, nil
+	}
+	return false, nil
+}
 
 // Function SendCoins accepts names of users(from,to) and amount
 func (s *Storage) SendCoins(fromUser string, toUser string, amount int) error {
@@ -76,7 +111,7 @@ func (s *Storage) SendCoins(fromUser string, toUser string, amount int) error {
 	var fromUserId, toUserId int
 	err = psql.Select("id", "coins").
 		From("users").
-		Where("name = ?", fromUser).
+		Where("name=?", fromUser).
 		RunWith(tx).
 		QueryRow().
 		Scan(&fromUserId, &fromCoins)
@@ -88,7 +123,7 @@ func (s *Storage) SendCoins(fromUser string, toUser string, amount int) error {
 	}
 	err = psql.Select("id", "coins").
 		From("users").
-		Where("name = ?", toUser).
+		Where("name=?", toUser).
 		RunWith(tx).
 		QueryRow().
 		Scan(&toUserId, &toCoins)
@@ -102,7 +137,7 @@ func (s *Storage) SendCoins(fromUser string, toUser string, amount int) error {
 
 	_, err = psql.Update("users").
 		Set("coins", fromCoins-amount).
-		Where("name = ?", fromUser).
+		Where("name=?", fromUser).
 		RunWith(tx).
 		Exec()
 	if err != nil {
@@ -111,7 +146,7 @@ func (s *Storage) SendCoins(fromUser string, toUser string, amount int) error {
 
 	_, err = psql.Update("users").
 		Set("coins", toCoins+amount).
-		Where("name = ?", toUser).
+		Where("name=?", toUser).
 		RunWith(tx).
 		Exec()
 	if err != nil {
@@ -216,7 +251,7 @@ func (s *Storage) Buy(item string, user string) error {
 	var userBalance, userID, itemPrice, itemID int
 	err = psql.Select("id", "coins").
 		From("users").
-		Where("name = ?", user).
+		Where("name=?", user).
 		RunWith(tx).
 		QueryRow().
 		Scan(&userID, &userBalance)
@@ -226,7 +261,7 @@ func (s *Storage) Buy(item string, user string) error {
 
 	err = psql.Select("price", "id").
 		From("merch").
-		Where("name = ?", item).
+		Where("name=?", item).
 		RunWith(tx).
 		QueryRow().
 		Scan(&itemPrice, &itemID)
@@ -240,17 +275,13 @@ func (s *Storage) Buy(item string, user string) error {
 
 	_, err = psql.Update("users").
 		Set("coins", userBalance-itemPrice).
-		Where("name = ?", user).
+		Where("name=?", user).
 		RunWith(tx).
 		Exec()
 	if err != nil {
 		return fmt.Errorf("failed to update coins for fromUser: %w", err)
 	}
 
-	/*  INSERT INTO user_inventory (user_id, merch_id, quantity)
-	VALUES (1, 2, 5)  -- пользователь с id 1 получает 5 предметов с id 2
-	ON CONFLICT (user_id, merch_id) DO UPDATE
-	SET quantity = user_inventory.quantity + EXCLUDED.quantity; */
 	_, err = psql.Insert("user_inventory").
 		Columns("user_id", "merch_id", "quantity").
 		Values(userID, itemID, 1).
