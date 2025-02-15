@@ -18,10 +18,10 @@ type UserInfo struct {
 	Inventory   []InventoryEntry
 }
 type CoinHistory struct {
-	Recieved []TransactionRecieved
+	Received []TransactionReceived
 	Sent     []TransactionSent
 }
-type TransactionRecieved struct {
+type TransactionReceived struct {
 	Amount   int
 	FromUser string
 }
@@ -48,20 +48,7 @@ func New(port, user, password, name, host string) (*Storage, error) {
 	return &Storage{db: db}, nil
 
 }
-func (s *Storage) UserBalance(user string) (int, error) {
-	const op = "storage.postgres.UserBalance"
-	qBuilder := squirrel.Select("coins").From("users").Where("name=?", user)
-	query, args, err := qBuilder.ToSql()
-	if err != nil {
-		return -1, fmt.Errorf("%s: %w", op, err)
-	}
-	var balance int
-	err = s.db.QueryRow(query, args...).Scan(&balance)
-	if err != nil {
-		return -1, fmt.Errorf("%s: %w", op, err)
-	}
-	return balance, nil
-}
+
 func (s *Storage) AddUser(name, passHash string) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	_, err := psql.Insert("users").
@@ -177,35 +164,40 @@ func (s *Storage) UserInfo(user string) (*UserInfo, error) {
 		Where("name=?", user).
 		RunWith(s.db).
 		QueryRow().
-		Scan(&userInfo.Coins)
+		Scan(&userID, &userInfo.Coins)
+	fmt.Println(userInfo)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	//inventory
-	rows, err := squirrel.Select("m.name", "ui.quantity").
+	rows, err := psql.Select("m.name", "ui.quantity").
 		From("user_inventory ui").
 		Join("merch m ON ui.merch_id = m.id").
 		Where("ui.user_id = ?", userID).
 		RunWith(s.db).
 		Query()
 	if err != nil {
+		fmt.Print("INVENTORY ERR: ", err, "\n")
 		return nil, err
 	}
 	for rows.Next() {
 		var ie InventoryEntry
 		if err := rows.Scan(&ie.Type, &ie.Quantity); err != nil {
+			fmt.Print("INVENTORY SCAN ERR: ", err, "\n")
 			return nil, err
 		}
 		userInfo.Inventory = append(userInfo.Inventory, ie)
 	}
 	//coin history
 	//transactions SENT
-	tsRows, err := squirrel.Select("to_user_id", "amount").
-		From("transactions").
-		Where("from_user_id = ?", userID).
+	tsRows, err := psql.Select("u.name", "t.amount").
+		From("transactions t").
+		Join("users u ON u.id = t.to_user_id").
+		Where("t.from_user_id = ?", userID).
 		RunWith(s.db).
 		Query()
 	if err != nil {
+		fmt.Print("TRANSACTIONS ERR: ", err, "\n")
 		return nil, err
 	}
 	for tsRows.Next() {
@@ -213,35 +205,37 @@ func (s *Storage) UserInfo(user string) (*UserInfo, error) {
 			trSent TransactionSent
 		)
 		if err := tsRows.Scan(&trSent.ToUser, &trSent.Amount); err != nil {
+			fmt.Print("TRANSACTIONS ROWS ERR: ", err, "\n")
 			return nil, err
 		}
 		userInfo.CoinHistory.Sent = append(userInfo.CoinHistory.Sent, trSent)
 	}
-	//transactions RECIEVED
-	trRows, err := squirrel.Select("from_user_id", "amount").
-		From("transactions").
-		Where("to_user_id = ?", userID).
+	//transactions RECEIVED
+	trRows, err := psql.Select("u.name", "t.amount").
+		From("transactions t").
+		Join("users u ON u.id = t.from_user_id").
+		Where("t.to_user_id = ?", userID).
 		RunWith(s.db).
 		Query()
 	if err != nil {
+		fmt.Print("TR RECIEVED ERR: ", err, "\n")
 		return nil, err
 	}
 	for trRows.Next() {
 		var (
-			trRcv TransactionRecieved
+			trRcv TransactionReceived
 		)
 		if err := trRows.Scan(&trRcv.FromUser, &trRcv.Amount); err != nil {
+			fmt.Print("TR REC SCAN ERR: ", err, "\n")
 			return nil, err
 		}
-		userInfo.CoinHistory.Recieved = append(userInfo.CoinHistory.Recieved, trRcv)
+		userInfo.CoinHistory.Received = append(userInfo.CoinHistory.Received, trRcv)
 	}
 	return &userInfo, nil
 }
 
 // Function Buy accepts name of an item, adds an item to user inventory
 func (s *Storage) Buy(item string, user string) error {
-	const op = "storage.postgres.Buy"
-
 	tx, err := s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -296,5 +290,17 @@ func (s *Storage) Buy(item string, user string) error {
 	}
 
 	return nil
+}
 
+func (s *Storage) ItemExist(name string) (bool, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	var count int
+	err := psql.Select("COUNT(*)").From("merch").Where("name=?", name).RunWith(s.db).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return true, nil
+	}
+	return false, nil
 }

@@ -4,7 +4,7 @@
 package httpserver
 
 import (
-	"context"
+	//"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -390,16 +390,16 @@ func (response PostApiSendCoin500JSONResponse) VisitPostApiSendCoinResponse(w ht
 type StrictServerInterface interface {
 	// Аутентификация и получение JWT-токена. При первой аутентификации пользователь создается автоматически.
 	// (POST /api/auth)
-	PostApiAuth(ctx context.Context, request PostApiAuthRequestObject) (PostApiAuthResponseObject, error)
+	PostApiAuth(ctx *gin.Context, request PostApiAuthRequestObject) (PostApiAuthResponseObject, error)
 	// Купить предмет за монеты.
 	// (GET /api/buy/{item})
-	GetApiBuyItem(ctx context.Context, request GetApiBuyItemRequestObject) (GetApiBuyItemResponseObject, error)
+	GetApiBuyItem(ctx *gin.Context, request GetApiBuyItemRequestObject) (GetApiBuyItemResponseObject, error)
 	// Получить информацию о монетах, инвентаре и истории транзакций.
 	// (GET /api/info)
-	GetApiInfo(ctx context.Context, request GetApiInfoRequestObject) (GetApiInfoResponseObject, error)
+	GetApiInfo(ctx *gin.Context, request GetApiInfoRequestObject) (GetApiInfoResponseObject, error)
 	// Отправить монеты другому пользователю.
 	// (POST /api/sendCoin)
-	PostApiSendCoin(ctx context.Context, request PostApiSendCoinRequestObject) (PostApiSendCoinResponseObject, error)
+	PostApiSendCoin(ctx *gin.Context, request PostApiSendCoinRequestObject) (PostApiSendCoinResponseObject, error)
 }
 
 type StrictHandlerFunc = strictgin.StrictGinHandlerFunc

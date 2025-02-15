@@ -10,29 +10,33 @@ import (
 )
 
 func GetTokenFromContext(c *gin.Context) (string, error) {
-	token := c.GetHeader("Authorization")
-	if token == "" {
+	header := c.GetHeader("Authorization")
+	if header == "" {
 		return "", fmt.Errorf("authorization header is missing")
 	}
 
-	if len(token) > 7 && strings.HasPrefix(token, "Bearer ") {
-		return token[7:], nil
+	jwtToken := strings.Split(header, " ")
+	if len(jwtToken) != 2 {
+		return "", fmt.Errorf("incorrectly formatted authorization header")
 	}
 
-	return "", fmt.Errorf("invalid authorization format")
+	return jwtToken[1], nil
 }
-func GetUserFromToken(token string) (string, error) {
-	return "", nil
+func GetUserFromToken(token string, secretKey []byte) (string, error) {
+	claims, err := validateToken(token, secretKey)
+	if err != nil {
+		return "", err
+	}
+	name := claims["name"].(string)
+	return name, nil
 }
 func createToken(name string, secretKey []byte) (string, error) {
-	// Создаем токен
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"name": name,
 		"iat":  time.Now().Unix(),
 		"exp":  time.Now().Add(time.Hour * 72).Unix(),
 	})
 
-	// Подписываем токен
 	tokenString, err := token.SignedString(secretKey)
 	if err != nil {
 		return "", err
