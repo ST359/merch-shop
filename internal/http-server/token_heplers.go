@@ -31,6 +31,9 @@ func GetUserFromToken(token string, secretKey []byte) (string, error) {
 	return name, nil
 }
 func createToken(name string, secretKey []byte) (string, error) {
+	if len(secretKey) == 0 {
+		return "", fmt.Errorf("no secret key provided")
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"name": name,
 		"iat":  time.Now().Unix(),

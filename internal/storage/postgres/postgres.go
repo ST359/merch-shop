@@ -85,7 +85,6 @@ func (s *Storage) UserExist(name string) (bool, error) {
 	return false, nil
 }
 
-// Function SendCoins accepts names of users(from,to) and amount
 func (s *Storage) SendCoins(fromUser string, toUser string, amount int) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -154,7 +153,6 @@ func (s *Storage) SendCoins(fromUser string, toUser string, amount int) error {
 	return nil
 }
 func (s *Storage) UserInfo(user string) (*UserInfo, error) {
-	const op = "storage.postgres.User"
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	var userInfo UserInfo
 	var userID int
@@ -167,7 +165,7 @@ func (s *Storage) UserInfo(user string) (*UserInfo, error) {
 		Scan(&userID, &userInfo.Coins)
 	fmt.Println(userInfo)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, err
 	}
 	//inventory
 	rows, err := psql.Select("m.name", "ui.quantity").
@@ -177,13 +175,11 @@ func (s *Storage) UserInfo(user string) (*UserInfo, error) {
 		RunWith(s.db).
 		Query()
 	if err != nil {
-		fmt.Print("INVENTORY ERR: ", err, "\n")
 		return nil, err
 	}
 	for rows.Next() {
 		var ie InventoryEntry
 		if err := rows.Scan(&ie.Type, &ie.Quantity); err != nil {
-			fmt.Print("INVENTORY SCAN ERR: ", err, "\n")
 			return nil, err
 		}
 		userInfo.Inventory = append(userInfo.Inventory, ie)
@@ -197,7 +193,6 @@ func (s *Storage) UserInfo(user string) (*UserInfo, error) {
 		RunWith(s.db).
 		Query()
 	if err != nil {
-		fmt.Print("TRANSACTIONS ERR: ", err, "\n")
 		return nil, err
 	}
 	for tsRows.Next() {
@@ -205,7 +200,6 @@ func (s *Storage) UserInfo(user string) (*UserInfo, error) {
 			trSent TransactionSent
 		)
 		if err := tsRows.Scan(&trSent.ToUser, &trSent.Amount); err != nil {
-			fmt.Print("TRANSACTIONS ROWS ERR: ", err, "\n")
 			return nil, err
 		}
 		userInfo.CoinHistory.Sent = append(userInfo.CoinHistory.Sent, trSent)
@@ -218,7 +212,6 @@ func (s *Storage) UserInfo(user string) (*UserInfo, error) {
 		RunWith(s.db).
 		Query()
 	if err != nil {
-		fmt.Print("TR RECIEVED ERR: ", err, "\n")
 		return nil, err
 	}
 	for trRows.Next() {
@@ -226,7 +219,6 @@ func (s *Storage) UserInfo(user string) (*UserInfo, error) {
 			trRcv TransactionReceived
 		)
 		if err := trRows.Scan(&trRcv.FromUser, &trRcv.Amount); err != nil {
-			fmt.Print("TR REC SCAN ERR: ", err, "\n")
 			return nil, err
 		}
 		userInfo.CoinHistory.Received = append(userInfo.CoinHistory.Received, trRcv)
@@ -234,7 +226,6 @@ func (s *Storage) UserInfo(user string) (*UserInfo, error) {
 	return &userInfo, nil
 }
 
-// Function Buy accepts name of an item, adds an item to user inventory
 func (s *Storage) Buy(item string, user string) error {
 	tx, err := s.db.Begin()
 	if err != nil {

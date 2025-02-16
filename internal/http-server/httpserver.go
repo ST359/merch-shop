@@ -295,7 +295,6 @@ func Run() {
 
 	s := New(cfg)
 	r := gin.Default()
-
 	handler := NewStrictHandler(s, []StrictMiddlewareFunc{s.AuthMiddleware})
 	RegisterHandlers(r, handler)
 
