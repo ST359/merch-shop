@@ -163,7 +163,6 @@ func (s *Storage) UserInfo(user string) (*UserInfo, error) {
 		RunWith(s.db).
 		QueryRow().
 		Scan(&userID, &userInfo.Coins)
-	fmt.Println(userInfo)
 	if err != nil {
 		return nil, err
 	}
