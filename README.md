@@ -1,4 +1,3 @@
-# Avito trainee backend assignment 2025
 
 - [English](#Running)
   - [Running](#Running)
