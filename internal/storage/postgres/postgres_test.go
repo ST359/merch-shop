@@ -68,7 +68,7 @@ func TestUserPassHash(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestSendCoins_Success(t *testing.T) {
+func TestSendCoinsSuccess(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	assert.NoError(t, err)
 	defer db.Close()
@@ -105,7 +105,7 @@ func TestSendCoins_Success(t *testing.T) {
 	err = mock.ExpectationsWereMet()
 	assert.NoError(t, err)
 }
-func TestSendCoins_InsufficientBalance(t *testing.T) {
+func TestSendCoinsInsufficientBalance(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	assert.NoError(t, err)
 	defer db.Close()
@@ -130,7 +130,7 @@ func TestSendCoins_InsufficientBalance(t *testing.T) {
 	err = mock.ExpectationsWereMet()
 	assert.NoError(t, err)
 }
-func TestSendCoins_UserNotFound(t *testing.T) {
+func TestSendCoinsUserNotFound(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	assert.NoError(t, err)
 	defer db.Close()
@@ -206,7 +206,7 @@ func TestUserInfo(t *testing.T) {
 		t.Errorf("there were unfulfilled expectations: %s", err)
 	}
 }
-func TestBuy_Success(t *testing.T) {
+func TestBuySuccess(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	assert.NoError(t, err)
 	defer db.Close()
@@ -240,7 +240,7 @@ func TestBuy_Success(t *testing.T) {
 	err = mock.ExpectationsWereMet()
 	assert.NoError(t, err)
 }
-func TestBuy_InsufficientBalance(t *testing.T) {
+func TestBuyInsufficientBalance(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	assert.NoError(t, err)
 	defer db.Close()
